@@ -1,0 +1,1067 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>FEAX — Minimal 2D Truss + Frame (Beam) FEA</title>
+<style>
+/* ===== Instructions Panel ===== */
+#instructions {
+  background: #161a2b;
+  border: 1px solid #2e335a;
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 10px;
+  color: #e6ebff;
+  font-size: 12px;
+}
+
+#instructions h3 {
+  margin: 0 0 6px 0;
+  font-size: 14px;
+}  
+
+#instructions ol,
+#instructions ul {
+  padding-left: 18px;
+  margin: 6px 0;
+}
+
+#instructions li {
+  margin-bottom: 4px;
+}
+
+.badge {
+  background: #2f6bff;
+  color: white;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.warning {
+  color: #ffb347;
+  font-size: 11px;
+  margin-top: 6px;
+}
+
+.ghost {
+  background: none;
+  border: 1px solid #3a3f6a;
+  color: #cbd4ff;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+:root{
+  --bg:#0f1220; --panel:#151a33; --ink:#e7ecff; --muted:#9fb1ff;
+  --accent:#58c8ff; --ok:#39e58c; --warn:#ffcb47; --bad:#ff647a; --grid:#223;
+  --red:#ff5a66; --blue:#4d79ff; --gray:#cfcfe0;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);
+  font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial}
+#app{display:grid;grid-template-columns:360px 1fr 380px;grid-template-rows:auto 1fr auto;height:100vh}
+header{grid-column:1/-1;background:#101639;border-bottom:1px solid #1d2550;
+  padding:10px 14px;display:flex;gap:12px;align-items:center}
+h1{font-size:18px;margin:0;font-weight:800}
+.tag{padding:4px 8px;background:#0f1a3d;color:var(--muted);border-radius:8px;font-size:12px}
+main{grid-column:1/-1;display:grid;grid-template-columns:360px 1fr 380px}
+#left,#right{background:var(--panel);padding:12px;border-right:1px solid #1d2550;overflow:auto}
+#right{border-left:1px solid #1d2550;border-right:none}
+
+#center{
+  position:relative;
+  overflow:hidden;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+}
+
+footer{grid-column:1/-1;background:#0d132b;border-top:1px solid #1d2550;padding:8px 12px;font-size:12px;color:var(--muted);display:flex;gap:10px;align-items:center}
+
+.section{margin:10px 0 12px;padding:10px;border:1px solid #27316b;border-radius:10px;background:#0f1736}
+.section h3{margin:0 0 8px;font-size:14px;color:#dfe9ff}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0}
+.label{font-size:12px;color:#b8c6ff}
+input[type="number"],select,button,input[type="range"]{
+  background:#0e1634;color:var(--ink);border:1px solid #2a3566;border-radius:8px;padding:6px 8px;font-size:13px}
+button{cursor:pointer}
+button.primary{background:linear-gradient(180deg,#1d5cff,#4ea1ff);color:#fff;border:none;font-weight:700}
+button.ghost{background:#0d1330;border:1px dashed #4051a2;color:#9fb1ff}
+button:disabled{opacity:.55}
+.range{display:flex;align-items:center;gap:8px}
+.range input{width:140px}
+.range output{min-width:60px;text-align:right;color:var(--muted)}
+
+#view{position:relative;width:100%;height:100%;inset:0;background:radial-gradient(1000px 800px at 30% 30%,#101738 0%,#0f1220 55%,#0f1220 100%)}
+
+canvas{position:absolute;inset:0}
+#hud{position:absolute;top:8px;left:8px;background:#0e1634cc;border:1px solid #2a3566;
+  padding:6px 10px;border-radius:8px;font-size:12px;color:#cfe1ff;backdrop-filter:blur(4px)}
+.grad{height:10px;width:160px;background:linear-gradient(90deg,var(--blue),var(--gray),var(--red));
+  border-radius:6px;border:1px solid #2a3566;margin-left:6px}
+
+table{width:100%;border-collapse:collapse;font-size:12px}
+td,th{border-bottom:1px solid #27316b;padding:6px 4px;text-align:left}
+th{color:#cfe1ff}
+.badge{padding:2px 6px;border-radius:6px;font-size:11px;display:inline-block}
+.badge.ok{background:#0c2a1a;color:#6ef0b0;border:1px solid #1b5e3b}
+.badge.bad{background:#33131a;color:#ff96a6;border:1px solid #6a1b2b}
+
+@media (max-width:1200px){
+  #app{grid-template-columns:1fr;grid-template-rows:auto 1fr auto}
+  main{grid-template-columns:1fr}
+  #left,#right{grid-column:1/-1;border:none;border-top:1px solid #1d2550}
+}
+
+#left   { grid-column: 1; }
+#center { grid-column: 2; }
+#right  { grid-column: 3; }
+#center {
+  position: relative;
+  overflow: hidden;
+  background: #0f1220;
+}
+
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>FEAX — Minimal 2D Truss + Frame</h1>
+    <span class="tag">scratch-built</span>
+    <span class="tag" id="status">Ready</span>
+  </header>
+
+  <main>
+
+    <!-- ================= LEFT ================= -->
+     <!-- ================= INSTRUCTIONS PANEL ================= -->
+<div id="instructions" class="section">
+  <h3>
+    How to Use FEAX
+    <button id="toggle-help" class="ghost" style="float:right">Hide</button>
+  </h3>
+
+  <div id="help-content">
+    <p id="help-hint">
+      <b>Current Tool:</b> Select and drag nodes, or inspect bars.
+    </p>
+
+    <ol>
+      <li><b>Nodes</b>: Select <span class="badge ok">Node</span> and click in the canvas.</li>
+      <li><b>Bars</b>: Select <span class="badge ok">Bar</span>, click two nodes.</li>
+      <li><b>Supports</b>: Select <span class="badge ok">Support</span>, click a node.</li>
+      <li><b>Loads</b>: Select <span class="badge ok">Load</span>, click a node.</li>
+      <li><b>Solve</b>: Press <span class="badge ok">Solve</span>.</li>
+    </ol>
+
+    <ul>
+      <li>Drag node → move geometry</li>
+      <li>Alt + Drag → pan</li>
+      <li>Mouse wheel → zoom</li>
+      <li>Red = tension • Blue = compression</li>
+    </ul>
+
+    <p class="warning">
+      ⚠️ Structures must be constrained to be stable.
+    </p>
+  </div>
+</div>
+
+    <div id="left">
+      <div class="section">
+        <h3>1) Tools</h3>
+        <div class="row">
+          <button id="t-select" class="primary">Select</button>
+          <button id="t-node">Node</button>
+          <button id="t-bar">Bar</button>
+          <button id="t-support">Support</button>
+          <button id="t-load">Load</button>
+          <button id="btn-delete" class="ghost">Delete</button>
+        </div>
+        <div class="row">
+          <span class="label">Element</span>
+          <select id="elem-type">
+            <option value="frame">Frame / Beam (u,v,θ)</option>
+            <option value="truss">Truss (u,v)</option>
+          </select>
+        </div>
+        <div class="row"><span class="label">Tips:</span> Alt+Drag = pan • Wheel = zoom • Drag nodes to move</div>
+      </div>
+
+      <div class="section">
+        <h3>2) Materials & Section</h3>
+        <div class="row">
+          <select id="mat-preset">
+            <option value="steel">Steel: E=210 GPa, ν=0.30, ρ=7850, σy=355 MPa</option>
+            <option value="al">Al 6061‑T6: E=69 GPa, ν=0.33, ρ=2700, σy=276 MPa</option>
+            <option value="pla">PLA: E=3.5 GPa, ν=0.39, ρ=1240, σy=60 MPa</option>
+            <option value="custom">Custom…</option>
+          </select>
+        </div>
+        <div class="row">
+          <label class="label">E (GPa)</label><input id="mat-E" type="number" value="210" step="1">
+          <label class="label">ν</label><input id="mat-nu" type="number" value="0.30" step="0.01">
+          <label class="label">ρ</label><input id="mat-rho" type="number" value="7850" step="10">
+          <label class="label">σy (MPa)</label><input id="mat-sy" type="number" value="355" step="1">
+        </div>
+        <div class="row">
+          <label class="label">b (m)</label><input id="sec-b" type="number" value="0.06" step="0.002">
+          <label class="label">h (m)</label><input id="sec-h" type="number" value="0.06" step="0.002">
+          <span class="label">A</span><span id="sec-A" class="tag">–</span>
+          <span class="label">I</span><span id="sec-I" class="tag">–</span>
+          <button id="btn-assign" class="ghost">Assign → Selected Bar</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>3) Supports & Loads</h3>
+        <div class="row">
+          <label class="label">Support</label>
+          <select id="support-type">
+            <option value="pin">Pin (fix u,v)</option>
+            <option value="rollerY">Roller (fix v)</option>
+            <option value="fixed">Fixed (u,v,θ)</option>
+          </select>
+        </div>
+        <div class="row">
+          <label class="label">Load</label>
+          <select id="load-type">
+            <option value="force">Force (N @ angle)</option>
+            <option value="moment">Moment (N·m, +CCW)</option>
+          </select>
+          <label class="label">Mag</label><input id="load-mag" type="number" value="1000" step="100">
+          <label class="label">Angle (°)</label><input id="load-ang" type="number" value="-90" step="5">
+        </div>
+        <div class="row">
+          <label class="label">UDL q (N/m, ↓)</label><input id="udl-q" type="number" value="0" step="50">
+          <button id="btn-udl-assign" class="ghost">Assign UDL → Selected Bar</button>
+          <label class="label">Gravity</label>
+          <select id="gravity"><option value="on">On</option><option value="off">Off</option></select>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>4) Solve</h3>
+        <div class="row">
+          <button id="btn-solve" class="primary">Solve</button>
+          <button id="btn-clear" class="ghost">Clear</button>
+          <button id="btn-preset-crane" class="ghost">Preset: Crane</button>
+          <button id="btn-preset-spar" class="ghost">Preset: Spar</button>
+        </div>
+        <div class="row range">
+          <label class="label">Deform Scale</label>
+          <input id="def-scale" type="range" min="0" max="200" step="1" value="60">
+          <output id="def-scale-out">x 60</output>
+        </div>
+        <div class="row range">
+          <label class="label">Load Factor</label>
+          <input id="load-factor" type="range" min="0" max="3" step="0.01" value="1">
+          <output id="load-factor-out">1.00×</output>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>5) Save / Load</h3>
+        <div class="row">
+          <button id="btn-export">Export JSON</button>
+          <input id="file-import" type="file" accept=".json">
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= CENTER ================= -->
+    <div id="center">
+      <div id="view">
+        <canvas id="grid"></canvas>
+        <canvas id="scene"></canvas>
+        <div id="hud">
+          <b>Mode:</b> <span id="hud-mode">Select</span> •
+          <b>Nodes:</b> <span id="hud-nodes">0</span> •
+          <b>Bars:</b> <span id="hud-bars">0</span>
+          <span class="grad"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= RIGHT ================= -->
+    <div id="right">
+      <div class="section">
+        <h3>Results</h3>
+        <table>
+          <tbody>
+            <tr><th>Max |u| (mm)</th><td id="res-umax">–</td></tr>
+            <tr><th>Max Tension σ (MPa)</th><td id="res-sigT">–</td></tr>
+            <tr><th>Max Compression σ (MPa)</th><td id="res-sigC">–</td></tr>
+            <tr><th>Min FOS</th><td id="res-fos">–</td></tr>
+            <tr><th>Mass (kg)</th><td id="res-mass">–</td></tr>
+            <tr><th>Stable?</th><td id="res-stable" class="badge">–</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="section">
+        <h3>Selected</h3>
+        <div id="sel-info">None</div>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <div>Drag nodes • Alt+Drag to pan • Wheel to zoom • Save/Load JSON</div>
+    <div style="margin-left:auto">© FEAX — Minimal</div>
+  </footer>
+</div>
+
+<script>
+    // ---------- Instructions panel toggle ----------
+document.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('toggle-help');
+  const box = document.getElementById('help-content');
+  if (!btn || !box) return;
+
+  btn.onclick = () => {
+    const hidden = box.style.display === 'none';
+    box.style.display = hidden ? 'block' : 'none';
+    btn.textContent = hidden ? 'Hide' : 'Show';
+  };
+});
+
+/* ================= USER INSTRUCTIONS LOGIC ================= */
+
+function updateHelpForMode() {
+  const hint = document.getElementById('help-hint');
+  if (!hint) return;
+
+  const text = {
+    select: "Select and drag nodes, or click bars to inspect results.",
+    node:   "Click anywhere in the canvas to create a node.",
+    bar:    "Click two nodes to create a bar element.",
+    support:"Click a node to apply the selected support.",
+    load:   "Click a node to apply a force or moment."
+  };
+
+  hint.innerHTML = `<b>Current Tool:</b> ${text[mode] || ""}`;
+}
+
+/* =============================================================================
+
+   FEAX — Minimal Core (model, solver, view)
+   - Elements: 'truss' (u,v) and 'frame' (u,v,θ). Global system uses 3 DOF per node;
+     truss elements ignore rotational DOFs internally.
+   - Loads: nodal forces & moments, member UDL (downward) and optional gravity.
+   - Results: displacements, element axial/bending stresses; color‑mapped by |σ|.
+   ========================================================================== */
+
+/* ---------- Utilities ---------- */
+const EPS=1e-12;
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const rad=d=>d*Math.PI/180;
+const fmt=(v,d=3)=>(Math.abs(v)<1e-12?0:v).toFixed(d);
+const deepCopy=o=>JSON.parse(JSON.stringify(o));
+
+/* ---------- Materials ---------- */
+const MATERIALS={
+  steel:{name:'Steel',E:210e9,nu:0.30,rho:7850,sy:355e6},
+  al:{name:'Al 6061-T6',E:69e9,nu:0.33,rho:2700,sy:276e6},
+  pla:{name:'PLA',E:3.5e9,nu:0.39,rho:1240,sy:60e6},
+};
+
+/* ---------- Model ---------- */
+const M={
+  nodes:[], // {id,x,y,fixedX,fixedY,fixedR,loads:[{fx,fy,mz}]}
+  bars:[],  // {id,i,j,type,E,nu,rho,sy,A,I,h,udl,alive:true}
+  nextNodeId:1,nextBarId:1,gravityOn:true,
+  cam:{x:0,y:0,s:100}
+};
+
+let last = null;
+let defScale = 60;
+let loadFactor = 1;
+
+function addNode(x,y){ const n={id:M.nextNodeId++,x,y,fixedX:false,fixedY:false,fixedR:false,loads:[]}; M.nodes.push(n); return n; }
+function addBar(i,j,mat,sec,type='frame'){
+  const A=sec.b*sec.h, I=sec.b*Math.pow(sec.h,3)/12;
+  const b={id:M.nextBarId++,i,j,type,E:mat.E,nu:mat.nu,rho:mat.rho,sy:mat.sy,A,I,h:sec.h,udl:0,alive:true};
+  M.bars.push(b); return b;
+}
+function removeNode(id){ M.bars=M.bars.filter(b=>b.i!==id&&b.j!==id); M.nodes=M.nodes.filter(n=>n.id!==id); }
+function removeBar(id){ M.bars=M.bars.filter(b=>b.id!==id); }
+const getNode=id=>M.nodes.find(n=>n.id===id);
+function geom(bar){ const ni=getNode(bar.i),nj=getNode(bar.j); const dx=nj.x-ni.x,dy=nj.y-ni.y; const L=Math.hypot(dx,dy); const c=dx/L,s=dy/L; return {ni,nj,L,c,s}; }
+function addNodalLoad(nid,fx=0,fy=0,mz=0){ const n=getNode(nid); if(n) n.loads.push({fx,fy,mz}); }
+
+/* ---------- Math helpers ---------- */
+const transpose=A=>A[0].map((_,j)=>A.map(r=>r[j]));
+function mult(A,B){const m=A.length,n=B[0].length,p=B.length;const C=Array.from({length:m},_=>Array(n).fill(0));
+  for(let i=0;i<m;i++)for(let k=0;k<p;k++){const a=A[i][k];if(!a)continue;for(let j=0;j<n;j++)C[i][j]+=a*B[k][j];}
+  return C;}
+function multVec(A,x){const m=A.length,n=A[0].length;const y=Array(m).fill(0);for(let i=0;i<m;i++){let s=0;for(let j=0;j<n;j++)s+=A[i][j]*x[j];y[i]=s;}return y;}
+const subVec=(a,b)=>a.map((v,i)=>v-(b[i]||0));
+
+/* ---------- Assembly & Solve ---------- */
+function assemble(loadFactor=1){
+  const Nn=M.nodes.length, dof=3*Nn;
+  const idx = new Map(M.nodes.map((n,i)=>[n.id,i]));
+  const K=Array.from({length:dof},_=>Array(dof).fill(0));
+  const F=Array(dof).fill(0);
+
+  const add=(map,Ke,Fe=null)=>{
+    for(let r=0;r<6;r++){ for(let c=0;c<6;c++) K[map[r]][map[c]]+=Ke[r][c]; if(Fe) F[map[r]]+=Fe[r]; }
+  };
+
+  for(const bar of M.bars){
+    if(!bar.alive) continue;
+    const {ni,nj,L,c,s} = geom(bar);
+    const i=idx.get(ni.id), j=idx.get(nj.id);
+    const map=[3*i,3*i+1,3*i+2, 3*j,3*j+1,3*j+2];
+
+    const R=[[c,s,0],[-s,c,0],[0,0,1]];
+    const T=[[c,s,0,0,0,0],[-s,c,0,0,0,0],[0,0,1,0,0,0],[0,0,0,c,s,0],[0,0,0,-s,c,0],[0,0,0,0,0,1]];
+    const TT=transpose(T);
+
+    let KeL=Array.from({length:6},_=>Array(6).fill(0)), FeL=Array(6).fill(0);
+
+    if(bar.type==='frame'){
+      const EA=bar.E*bar.A, EI=bar.E*bar.I;
+      const L2=L*L, L3=L2*L;
+      KeL=[
+        [EA/L,0,0, -EA/L,0,0],
+        [0,12*EI/L3,6*EI/L2, 0,-12*EI/L3,6*EI/L2],
+        [0,6*EI/L2,4*EI/L, 0,-6*EI/L2,2*EI/L],
+        [-EA/L,0,0, EA/L,0,0],
+        [0,-12*EI/L3,-6*EI/L2, 0,12*EI/L3,-6*EI/L2],
+        [0,6*EI/L2,2*EI/L, 0,-6*EI/L2,4*EI/L]
+      ];
+      // UDL (downward global) projected to local transverse; gravity as UDL of magnitude ρ A g
+      const w_user=bar.udl||0, wg=M.gravityOn ? bar.rho*bar.A*9.80665 : 0;
+      const w_local = (w_user+wg)*c;  // approximate vertical→local projection
+      const w = -w_local;             // positive local +y up; downward is negative
+      if(Math.abs(w)>EPS){
+        FeL[1]+=w*L/2;  FeL[2]+=w*L*L/12;
+        FeL[4]+=w*L/2;  FeL[5]+=-w*L*L/12;
+      }
+    } else {
+      // Truss: axial only -> embed into 6x6 (use transform to global)
+      const k = bar.E*bar.A/L;
+      KeL=[[k,0,0,-k,0,0],[0,0,0,0,0,0],[0,0,0,0,0,0],[-k,0,0,k,0,0],[0,0,0,0,0,0],[0,0,0,0,0,0]];
+      // Self‑weight as nodal forces (global -Y)
+      if(M.gravityOn){
+        const W = bar.rho*bar.A*L*9.80665;
+        F[map[1]] += -0.5*W;
+        F[map[4]] += -0.5*W;
+      }
+    }
+
+    const KeG = mult(TT, mult(KeL, T));
+    const FeG = multVec(TT, FeL);
+    add(map, KeG, FeG);
+  }
+
+  // nodal loads
+  for(const n of M.nodes){
+    const i=idx.get(n.id);
+    let Fx=0,Fy=0,Mz=0;
+    for(const Ld of n.loads){ Fx+=Ld.fx; Fy+=Ld.fy; Mz+=Ld.mz||0; }
+    F[3*i]   += loadFactor*Fx;
+    F[3*i+1] += loadFactor*Fy;
+    F[3*i+2] += loadFactor*Mz;
+  }
+
+  const constrained=[], free=[];
+  for(const n of M.nodes){
+    const i=idx.get(n.id);
+    if(n.fixedX) constrained.push(3*i);
+    if(n.fixedY) constrained.push(3*i+1);
+    if(n.fixedR) constrained.push(3*i+2);
+  }
+  for(let d=0; d<3*Nn; d++) if(!constrained.includes(d)) free.push(d);
+
+  const Kff=Array.from({length:free.length},_=>Array(free.length).fill(0));
+  const Ff=Array(free.length).fill(0);
+  for(let r=0;r<free.length;r++){
+    Ff[r] = F[free[r]];
+    for(let c=0;c<free.length;c++) Kff[r][c]=K[free[r]][free[c]];
+  }
+  return {Kff,Ff,free,idx};
+}
+
+function solveLinear(Ain,bin){
+  const n=bin.length, A=Ain.map(r=>r.slice()), b=bin.slice();
+  for(let k=0;k<n;k++){
+    let p=k, max=Math.abs(A[k][k]);
+    for(let i=k+1;i<n;i++){ const v=Math.abs(A[i][k]); if(v>max){max=v;p=i;} }
+    if(max<EPS) throw new Error('Singular matrix / under‑constrained.');
+    if(p!==k){ [A[k],A[p]]=[A[p],A[k]]; [b[k],b[p]]=[b[p],b[k]]; }
+    for(let i=k+1;i<n;i++){
+      const m=A[i][k]/A[k][k]; if(Math.abs(m)<EPS) continue;
+      for(let j=k;j<n;j++) A[i][j]-=m*A[k][j];
+      b[i]-=m*b[k];
+    }
+  }
+  const x=Array(n).fill(0);
+  for(let i=n-1;i>=0;i--){ let s=0; for(let j=i+1;j<n;j++) s+=A[i][j]*x[j]; x[i]=(b[i]-s)/A[i][i]; }
+  return x;
+}
+
+function solveOnce(loadFactor=1){
+  const asm=assemble(loadFactor);
+  let uf;
+  try{ uf=solveLinear(asm.Kff, asm.Ff); }
+  catch(e){ return {ok:false, error:e.message}; }
+
+  // expand to full displacement vector
+  const dof=M.nodes.length*3, u=Array(dof).fill(0);
+  asm.free.forEach((d,k)=>u[d]=uf[k]);
+
+  // element results
+  const elem=[];
+  let maxU=0, sigMaxT=-Infinity, sigMaxC=Infinity;
+  for(const bar of M.bars){
+    const {ni,nj,L,c,s}=geom(bar);
+    const i=asm.idx.get(ni.id), j=asm.idx.get(nj.id);
+    const ue=[u[3*i],u[3*i+1],u[3*i+2], u[3*j],u[3*j+1],u[3*j+2]];
+
+    // transform to local
+    const T=[[c,s,0,0,0,0],[-s,c,0,0,0,0],[0,0,1,0,0,0],[0,0,0,c,s,0],[0,0,0,-s,c,0],[0,0,0,0,0,1]];
+    const uL=multVec(T, ue);
+
+    let sigma_ax=0, sigma_top=0, sigma_bot=0, N=0, M1=0, M2=0, V1=0, V2=0;
+
+    if(bar.type==='frame'){
+      const EA=bar.E*bar.A, EI=bar.E*bar.I;
+      const L2=L*L, L3=L2*L;
+      const KeL=[
+        [EA/L,0,0,-EA/L,0,0],
+        [0,12*EI/L3,6*EI/L2,0,-12*EI/L3,6*EI/L2],
+        [0,6*EI/L2,4*EI/L,0,-6*EI/L2,2*EI/L],
+        [-EA/L,0,0,EA/L,0,0],
+        [0,-12*EI/L3,-6*EI/L2,0,12*EI/L3,-6*EI/L2],
+        [0,6*EI/L2,2*EI/L,0,-6*EI/L2,4*EI/L]
+      ];
+      const w_user=bar.udl||0, wg=M.gravityOn?bar.rho*bar.A*9.80665:0;
+      const w=-((w_user+wg)*c);
+      const fFixed=[0,w*L/2,w*L*L/12, 0,w*L/2,-w*L*L/12];
+      const feL = subVec(multVec(KeL, uL), fFixed);
+      N=feL[0]; V1=feL[1]; M1=feL[2]; V2=feL[4]; M2=feL[5];
+      sigma_ax = N/bar.A;
+      const y=bar.h/2, Menv=Math.max(Math.abs(M1),Math.abs(M2));
+      const sigma_b = Menv*y/bar.I;
+      sigma_top = sigma_ax + sigma_b; sigma_bot = sigma_ax - sigma_b;
+      sigMaxT=Math.max(sigMaxT, sigma_top, sigma_bot);
+      sigMaxC=Math.min(sigMaxC, sigma_top, sigma_bot);
+    } else {
+      // truss: axial only
+      const dux=u[3*j]-u[3*i], duy=u[3*j+1]-u[3*i+1];
+      const axial=(dux*c + duy*s)/L;
+      sigma_ax=bar.E*axial;
+      N=sigma_ax*bar.A;
+      sigma_top=sigma_ax; sigma_bot=sigma_ax;
+      sigMaxT=Math.max(sigMaxT, sigma_ax);
+      sigMaxC=Math.min(sigMaxC, sigma_ax);
+    }
+    elem.push({id:bar.id,type:bar.type,L,N,V1,V2,M1,M2,sigma_ax,sigma_top,sigma_bot});
+  }
+
+  for(let k=0;k<u.length;k+=3) maxU=Math.max(maxU, Math.hypot(u[k],u[k+1]));
+  let mass=0; for(const b of M.bars){ const {L}=geom(b); if(b.alive) mass+=b.rho*b.A*L; }
+
+  return {ok:true, u, elem, maxU, sigMaxT, sigMaxC, mass};
+}
+
+/* ---------- Export / Import ---------- */
+const FEAX_IO = {
+  toJSON:()=>deepCopy(M),
+  fromJSON:(obj)=>{
+    M.nodes=(obj.nodes||[]).map(n=>({fixedR:false,loads:[],...n}));
+    M.bars=(obj.bars||[]).map(b=>({type:(b.type||'truss'),udl:(b.udl||0),alive:true,...b}));
+    M.nextNodeId=obj.nextNodeId||1; M.nextBarId=obj.nextBarId||1;
+    M.gravityOn=!!obj.gravityOn; if(obj.cam) M.cam=obj.cam;
+  }
+};
+
+/* =============================================================================
+   View & Interaction
+   ========================================================================== */
+const grid=document.getElementById('grid'), scene=document.getElementById('scene');
+const g=grid.getContext('2d'), s=scene.getContext('2d');
+let W=0,H=0;
+function resize(){
+  const r=document.getElementById('view').getBoundingClientRect();
+  W=r.width; H=r.height;
+  [grid,scene].forEach(c=>{c.width=W*2;c.height=H*2;c.style.width=W+'px';c.style.height=H+'px';});
+  g.setTransform(2,0,0,2,0,0); s.setTransform(2,0,0,2,0,0);
+  draw();
+}
+window.addEventListener('resize',resize);
+
+function toScreen(p){ return {x:(p.x-M.cam.x)*M.cam.s + W/2, y:(p.y-M.cam.y)*M.cam.s + H/2}; }
+function toWorld(p){ return {x:(p.x-W/2)/M.cam.s + M.cam.x, y:(p.y-H/2)/M.cam.s + M.cam.y}; }
+
+let mode='select';updateHelpForMode(); function setMode(m){ mode=m; document.getElementById('hud-mode').textContent=m.charAt(0).toUpperCase()+m.slice(1); updateHelpForMode()}
+let hover={node:null,bar:null}, selected={node:null,bar:null};
+let dragNode=null, isPanning=false, dragStart=null;
+
+scene.addEventListener('mousemove', (e)=>{
+  const pos=toWorld({x:e.offsetX,y:e.offsetY});
+  if(isPanning && dragStart){
+    M.cam.x=dragStart.x+(dragStart.sx-e.clientX)/M.cam.s;
+    M.cam.y=dragStart.y+(dragStart.sy-e.clientY)/M.cam.s;
+    draw(); return;
+  }
+  
+  if(dragNode){ dragNode.x=pos.x; dragNode.y=pos.y; requestLiveSolve(); return; }
+  hover.node = nearestNode(pos, 12/M.cam.s);
+  hover.bar  = nearestBar(pos, 9/M.cam.s);
+});
+// Toggle instructions panel
+scene.addEventListener('mouseleave',()=>{hover.node=null;hover.bar=null;dragNode=null;isPanning=false;});
+scene.addEventListener('mousedown',(e)=>{
+  if(e.altKey){ isPanning=true; dragStart={x:M.cam.x,y:M.cam.y,sx:e.clientX,sy:e.clientY}; return; }
+  const pos=toWorld({x:e.offsetX,y:e.offsetY});
+  if(mode==='node'){
+    if(hover.node){ dragNode=hover.node; }
+    else { const n=addNode(pos.x,pos.y); selected={node:n,bar:null}; }
+    draw();
+  }else if(mode==='bar'){
+    if(!hover.node){ return; }
+    if(selected.node && selected.node.id!==hover.node.id){
+      const mat=currentMaterial(), sec=currentSection(), type=document.getElementById('elem-type').value;
+      const b=addBar(selected.node.id, hover.node.id, mat, sec, type);
+      selected={bar:b,node:null}; requestLiveSolve();
+    }else{
+      selected={node:hover.node,bar:null};
+
+    }
+  }else if(mode==='support'){
+    if(hover.node){
+      const t=document.getElementById('support-type').value;
+      if(t==='pin'){ hover.node.fixedX=true; hover.node.fixedY=true; }
+      if(t==='rollerY'){ hover.node.fixedY=true; }
+      if(t==='fixed'){ hover.node.fixedX=true; hover.node.fixedY=true; hover.node.fixedR=true; }
+      selected={node:hover.node,bar:null}; requestLiveSolve();
+    }
+  }else if(mode==='load'){
+    if(hover.node){
+      const kind=document.getElementById('load-type').value;
+      if(kind==='force'){
+        const mag=+document.getElementById('load-mag').value||0;
+        const ang=rad(+document.getElementById('load-ang').value||0);
+        addNodalLoad(hover.node.id, mag*Math.cos(ang), mag*Math.sin(ang), 0);
+      }else{
+        const Mz=+document.getElementById('load-mag').value||0;
+        addNodalLoad(hover.node.id, 0,0, Mz);
+      }
+      selected={node:hover.node,bar:null}; requestLiveSolve();
+    }
+  }else if(mode==='select'){
+    if(hover.node){ selected={node:hover.node,bar:null}; dragNode=hover.node; }
+    else if(hover.bar){ selected={bar:hover.bar,node:null}; }
+    else selected={};
+    requestLiveSolve();
+  }
+});
+window.addEventListener('mouseup',()=>{dragNode=null;isPanning=false;});
+scene.addEventListener('wheel',(e)=>{
+  const d=e.deltaY<0?1.1:0.9;
+  const mouse=toWorld({x:e.offsetX,y:e.offsetY});
+  M.cam.s=clamp(M.cam.s*d,20,600);
+  const after=toWorld({x:e.offsetX,y:e.offsetY});
+  M.cam.x+=(mouse.x-after.x); M.cam.y+=(mouse.y-after.y);
+  draw();
+},{passive:true});
+
+function nearestNode(p,rad){ let best=null,d=1e9; for(const n of M.nodes){ const dd=Math.hypot(n.x-p.x,n.y-p.y); if(dd<rad&&dd<d){d=dd;best=n;} } return best; }
+function nearestBar(p,tol){
+  let best=null,d=1e9; for(const b of M.bars){
+    const {ni,nj}=geom(b);
+    const dist=pointSegDist(p,ni,nj);
+    if(dist<tol&&dist<d){d=dist;best=b;}
+  } return best;
+}
+function pointSegDist(p,a,b){
+  const vx=b.x-a.x, vy=b.y-a.y, wx=p.x-a.x, wy=p.y-a.y;
+  const c1=wx*vx+wy*vy; if(c1<=0) return Math.hypot(wx,wy);
+  const c2=vx*vx+vy*vy; if(c2<=c1) return Math.hypot(p.x-b.x,p.y-b.y);
+  const t=c1/c2; const px=a.x+t*vx, py=a.y+t*vy;
+  return Math.hypot(p.x-px,p.y-py);
+}
+
+/* ---------- Drawing ---------- */
+function niceStep(scale){ const px=80, w=px/scale; const p=Math.pow(10,Math.floor(Math.log10(w))); const m=w/p; if(m<1.5) return 1*p; if(m<3.5) return 2*p; if(m<7.5) return 5*p; return 10*p; }
+function drawGrid(){
+  const step=niceStep(M.cam.s);
+  g.clearRect(0,0,W,H);
+  g.save(); g.translate(W/2 - M.cam.x*M.cam.s, H/2 - M.cam.y*M.cam.s);
+  g.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--grid');
+  g.beginPath();
+  const minx=(-W/2)/M.cam.s+M.cam.x, maxx=(W/2)/M.cam.s+M.cam.x;
+  const miny=(-H/2)/M.cam.s+M.cam.y, maxy=(H/2)/M.cam.s+M.cam.y;
+  for(let x=Math.floor(minx/step)*step; x<maxx; x+=step){ g.moveTo(x*M.cam.s,miny*M.cam.s); g.lineTo(x*M.cam.s,maxy*M.cam.s); }
+  for(let y=Math.floor(miny/step)*step; y<maxy; y+=step){ g.moveTo(minx*M.cam.s,y*M.cam.s); g.lineTo(maxx*M.cam.s,y*M.cam.s); }
+  g.stroke();
+  g.restore();
+}
+
+function heatColor(sig,clampVal){
+  const t=clamp(Math.abs(sig)/clampVal,0,1);
+  const sgn = Math.sign(sig);
+  // compression=blue, tension=red
+  const mix=(a,b,x)=>Math.round(a+(b-a)*x);
+  let r,g,b;
+  if(sgn<0){ r=mix(80,200,1-t); g=mix(120,200,1-t); b=255; }
+  else { r=255; g=mix(80,200,1-t); b=mix(80,200,1-t); }
+  return `rgb(${r},${g},${b})`;
+}
+
+function drawScene(){
+  s.clearRect(0,0,W,H);
+  document.getElementById('hud-nodes').textContent=M.nodes.length;
+  document.getElementById('hud-bars').textContent=M.bars.length;
+
+  // stress clamp
+  let clampVal=1;
+  if(last){ const T=Math.abs(last.sigMaxT||1), C=Math.abs(last.sigMaxC||1); clampVal=Math.max(T,C); if(!isFinite(clampVal)||clampVal<EPS) clampVal=1; }
+
+  // bars
+  s.lineCap='round';
+  for(const b of M.bars){
+    const {ni,nj}=geom(b);
+    const A=toScreen(ni), B=toScreen(nj);
+    let col='#5a6aa4';
+    if(last){
+      const r=last.elem.find(e=>e.id===b.id);
+      if(r){
+        const sig=b.type==='frame'
+          ? Math.max(Math.abs(r.sigma_top),Math.abs(r.sigma_bot))*(r.sigma_top>=0?1:-1)
+          : r.sigma_ax;
+        col=heatColor(sig, clampVal);
+      }
+    }
+    if(!b.alive) col='#445';
+    s.strokeStyle=col; s.lineWidth=4;
+    s.beginPath(); s.moveTo(A.x,A.y); s.lineTo(B.x,B.y); s.stroke();
+  }
+
+  // loads & supports & nodes
+  for(const n of M.nodes){
+    const P=toScreen(n);
+    // loads
+    let Fx=0,Fy=0,Mz=0; for(const Ld of n.loads){ Fx+=Ld.fx; Fy+=Ld.fy; Mz+=Ld.mz||0; }
+    if(Math.hypot(Fx,Fy)>1e-6) drawArrow(P.x,P.y, P.x+Fx*0.0005*M.cam.s, P.y+Fy*0.0005*M.cam.s, '#ffd27a');
+    if(Math.abs(Mz)>1e-6) drawMoment(P.x,P.y,Mz);
+    // supports
+    if(n.fixedX&&n.fixedY&&n.fixedR) drawSupport(P.x,P.y,'fixed');
+    else if(n.fixedX&&n.fixedY) drawSupport(P.x,P.y,'pin');
+    else if(n.fixedY) drawSupport(P.x,P.y,'rollerY');
+    // node dot
+    const r=(hover.node&&hover.node.id===n.id)||(selected.node&&selected.node.id===n.id)?6:4;
+    s.fillStyle='#cfe6ff'; s.beginPath(); s.arc(P.x,P.y,r,0,Math.PI*2); s.fill();
+    s.strokeStyle='#345a9a'; s.lineWidth=1; s.stroke();
+  }
+
+  // deformed overlay
+  if(last){
+    const idMap=new Map(M.nodes.map((n,i)=>[n.id,i]));
+    s.strokeStyle='#8af9b3cc'; s.lineWidth=2;
+    for(const b of M.bars){
+      const {ni,nj,L,c,sn}=({ ...geom(b), sn:geom(b).s }) // alias to avoid shadow
+      const i=idMap.get(ni.id), j=idMap.get(nj.id);
+      const u=[ last.u[3*i],last.u[3*i+1],last.u[3*i+2], last.u[3*j],last.u[3*j+1],last.u[3*j+2] ];
+      if(b.type==='frame'){
+        // local disps -> Hermite curve for v(x)
+        const T=[[c,sn,0,0,0,0],[-sn,c,0,0,0,0],[0,0,1,0,0,0],[0,0,0,c,sn,0],[0,0,0,-sn,c,0],[0,0,0,0,0,1]];
+        const uL=multVec(T, u);
+        const seg=24; s.beginPath();
+        for(let k=0;k<=seg;k++){
+          const xi=k/seg, x=xi*L;
+          const N1=1-3*xi*xi+2*xi*xi*xi, N2=L*(xi-2*xi*xi+xi*xi*xi), N3=3*xi*xi-2*xi*xi*xi, N4=L*(-xi*xi+xi*xi*xi);
+          const uax=(1-xi)*uL[0]+xi*uL[3];
+          const vay=N1*uL[1]+N2*uL[2]+N3*uL[4]+N4*uL[5];
+          const gx=ni.x + (c*x) + (uax*c - vay*sn)*defScale;
+          const gy=ni.y + (sn*x) + (uax*sn + vay*c)*defScale;
+          const P=toScreen({x:gx,y:gy});
+          if(k===0) s.moveTo(P.x,P.y); else s.lineTo(P.x,P.y);
+        }
+        s.stroke();
+      } else {
+        const P1=toScreen({x:ni.x+u[0]*defScale, y:ni.y+u[1]*defScale});
+        const P2=toScreen({x:nj.x+u[3]*defScale, y:nj.y+u[4]*defScale});
+        s.beginPath(); s.moveTo(P1.x,P1.y); s.lineTo(P2.x,P2.y); s.stroke();
+      }
+    }
+  }
+}
+
+function drawArrow(x1,y1,x2,y2,color='#fff'){
+  s.strokeStyle=color; s.fillStyle=color; s.lineWidth=2;
+  s.beginPath(); s.moveTo(x1,y1); s.lineTo(x2,y2); s.stroke();
+  const ang=Math.atan2(y2-y1,x2-x1), sz=8;
+  s.beginPath(); s.moveTo(x2,y2);
+  s.lineTo(x2 - sz*Math.cos(ang-0.3), y2 - sz*Math.sin(ang-0.3));
+  s.lineTo(x2 - sz*Math.cos(ang+0.3), y2 - sz*Math.sin(ang+0.3));
+  s.closePath(); s.fill();
+}
+function drawSupport(x,y,type){
+  s.save(); s.translate(x,y); s.strokeStyle='#9fb1ff'; s.lineWidth=1.5;
+  if(type==='pin'){ s.beginPath(); s.moveTo(-10,8); s.lineTo(10,8); s.stroke(); s.beginPath(); s.arc(0,0,6,0,Math.PI*2); s.stroke(); }
+  else if(type==='rollerY'){ s.beginPath(); s.moveTo(-10,8); s.lineTo(10,8); s.stroke(); s.beginPath(); s.arc(0,0,6,0,Math.PI*2); s.stroke(); s.beginPath(); s.arc(-6,11,3,0,Math.PI*2); s.arc(6,11,3,0,Math.PI*2); s.stroke(); }
+  else if(type==='fixed'){ s.beginPath(); s.moveTo(-10,8); s.lineTo(10,8); s.stroke(); s.fillStyle='#9fb1ff'; s.fillRect(-4,-6,8,12); }
+  s.restore();
+}
+function drawMoment(x,y,Mz){
+  const r=14, ccw=Mz>=0;
+  s.strokeStyle='#ffd27a'; s.lineWidth=2; s.beginPath();
+  s.arc(x,y,r, ccw?0.5:-0.5, ccw?2.5:1.5); s.stroke();
+  s.beginPath(); const a=ccw?2.5:1.5; s.moveTo(x+r*Math.cos(a),y+r*Math.sin(a));
+  const a2=a+(ccw?0.3:-0.3); s.lineTo(x+r*Math.cos(a2),y+r*Math.sin(a2)); s.stroke();
+}
+function solveAndRender() {
+  const res = solveOnce(loadFactor);
+  if (!res.ok) {
+    setStatus("Unstable / Singular");
+    last = null;
+  } else {
+    setStatus("Solved");
+    last = res;
+    updateResults(res);
+  }
+  draw();
+}
+function updateResults(r){
+  document.getElementById('res-umax').textContent = (r.maxU*1000).toFixed(3);
+  document.getElementById('res-sigT').textContent = (r.sigMaxT/1e6).toFixed(2);
+  document.getElementById('res-sigC').textContent = (r.sigMaxC/1e6).toFixed(2);
+  document.getElementById('res-mass').textContent = r.mass.toFixed(2);
+
+  const fosT = r.sigMaxT>0 ? Math.abs(currentMaterial().sy / r.sigMaxT) : Infinity;
+  const fosC = r.sigMaxC<0 ? Math.abs(currentMaterial().sy / r.sigMaxC) : Infinity;
+  const fos = Math.min(fosT,fosC);
+  document.getElementById('res-fos').textContent = isFinite(fos)?fos.toFixed(2):'–';
+
+  const stable = r.ok;
+  const el = document.getElementById('res-stable');
+  el.textContent = stable ? 'Yes' : 'No';
+  el.className = stable ? 'badge ok' : 'badge bad';
+}
+
+let liveSolve= true;
+let solveQueued= false;
+function requestLiveSolve(){
+  if (solveQueued) return;
+  solveQueued = true;
+  requestAnimationFrame(() => {
+    solveQueued = false;
+    solveAndRender();
+  });
+}
+function draw(){ drawGrid(); drawScene(); }
+
+/* ---------- UI Wiring ---------- */
+function setStatus(msg){ document.getElementById('status').textContent=msg; }
+
+function currentMaterial(){
+  const sel=document.getElementById('mat-preset').value;
+  const get=()=>({name:'Custom',E:+document.getElementById('mat-E').value*1e9,nu:+document.getElementById('mat-nu').value,rho:+document.getElementById('mat-rho').value,sy:+document.getElementById('mat-sy').value*1e6});
+  if(sel==='custom') return get();
+  const p=(sel==='steel'?MATERIALS.steel:sel==='al'?MATERIALS.al:MATERIALS.pla);
+  document.getElementById('mat-E').value=p.E/1e9;
+  document.getElementById('mat-nu').value=p.nu;
+  document.getElementById('mat-rho').value=p.rho;
+  document.getElementById('mat-sy').value=p.sy/1e6;
+  return p;
+}
+function currentSection(){
+  const b=+document.getElementById('sec-b').value, h=+document.getElementById('sec-h').value;
+  const A=b*h, I=b*Math.pow(h,3)/12;
+  document.getElementById('sec-A').textContent=(A*1e4).toFixed(3)+' cm²';
+  document.getElementById('sec-I').textContent=(I*1e12).toFixed(3)+' cm⁴';
+  return {b,h};
+}
+
+function assignMaterialToSelection(){
+  if(!selected.bar) return;
+  const m=currentMaterial(), s=currentSection();
+  const A=s.b*s.h, I=s.b*Math.pow(s.h,3)/12;
+  Object.assign(selected.bar,{E:m.E,nu:m.nu,rho:m.rho,sy:m.sy,A:I?A:selected.bar.A,I:I||selected.bar.I,h:s.h});
+  draw(); updateSelectedInfo();
+}
+function assignUDLToSelection(){
+  if(!selected.bar) return;
+  const q=+document.getElementById('udl-q').value||0;
+  selected.bar.udl=q; draw(); updateSelectedInfo();
+}
+
+function updateSelectedInfo(){
+  const box=document.getElementById('sel-info');
+  if(selected.node){
+    const n=selected.node;
+    const loads=n.loads.map((L,i)=>`#${i+1}: Fx=${fmt(L.fx,1)} N, Fy=${fmt(L.fy,1)} N, Mz=${fmt(L.mz||0,1)} N·m`).join('<br/>')||'none';
+    box.innerHTML=`<b>Node ${n.id}</b><br/>
+      x=${fmt(n.x,3)} m, y=${fmt(n.y,3)} m<br/>
+      fix: u=${n.fixedX}, v=${n.fixedY}, θ=${n.fixedR}<br/>
+      loads:<br/>${loads}
+      <div class="row">
+        <button id="nx" class="ghost">Toggle u</button>
+        <button id="ny" class="ghost">Toggle v</button>
+        <button id="nr" class="ghost">Toggle θ</button>
+        <button id="cl" class="ghost">Clear Loads</button>
+      </div>`;
+    setTimeout(()=>{
+      document.getElementById('nx').onclick=()=>{n.fixedX=!n.fixedX; draw(); updateSelectedInfo();};
+      document.getElementById('ny').onclick=()=>{n.fixedY=!n.fixedY; draw(); updateSelectedInfo();};
+      document.getElementById('nr').onclick=()=>{n.fixedR=!n.fixedR; draw(); updateSelectedInfo();};
+      document.getElementById('cl').onclick=()=>{n.loads=[]; draw(); updateSelectedInfo();};
+    },0);
+  }else if(selected.bar){
+    const b=selected.bar;
+    box.innerHTML=`<b>Bar ${b.id}</b> (n${b.i}→n${b.j})<br/>
+      ${b.type.toUpperCase()} • E=${fmt(b.E/1e9,1)} GPa • ρ=${fmt(b.rho,0)} • σy=${fmt(b.sy/1e6,1)} MPa<br/>
+      A=${fmt(b.A*1e4,3)} cm² • I=${fmt(b.I*1e12,3)} cm⁴ • h=${fmt(b.h,3)} m • UDL=${fmt(b.udl,1)} N/m
+      <div class="row"><button id="alive" class="ghost">${b.alive?'Deactivate':'Activate'}</button></div>`;
+    setTimeout(()=>{ document.getElementById('alive').onclick=()=>{b.alive=!b.alive; draw(); updateSelectedInfo();}; },0);
+  }else{
+    box.textContent='None';
+  }
+}
+
+function deleteSelection(){ if(selected.node) removeNode(selected.node.id); if(selected.bar) removeBar(selected.bar.id); selected={}; draw(); updateSelectedInfo(); solveAndRender(); }
+function setTool(btn,name){ ['t-select','t-node','t-bar','t-support','t-load'].forEach(id=>document.getElementById(id).classList.remove('primary')); btn.classList.add('primary'); setMode(name); }
+
+document.getElementById('t-select').onclick=e=>setTool(e.target,'select');
+document.getElementById('t-node').onclick  =e=>setTool(e.target,'node');
+document.getElementById('t-bar').onclick   =e=>setTool(e.target,'bar');
+document.getElementById('t-support').onclick=e=>setTool(e.target,'support');
+document.getElementById('t-load').onclick  =e=>setTool(e.target,'load');
+document.getElementById('btn-delete').onclick=deleteSelection;
+
+document.getElementById('mat-preset').onchange=()=>currentMaterial();
+document.getElementById('btn-assign').onclick=assignMaterialToSelection;
+document.getElementById('btn-udl-assign').onclick=assignUDLToSelection;
+document.getElementById('sec-b').oninput= currentSection;
+document.getElementById('sec-h').oninput= currentSection;
+document.getElementById('def-scale').oninput = e => {
+  defScale = +e.target.value;
+  document.getElementById('def-scale-out').textContent = 'x ' + defScale; draw();
+};
+
+document.getElementById('load-factor').oninput = e => {
+  loadFactor = +e.target.value;
+  document.getElementById('load-factor-out').textContent = loadFactor.toFixed(2) + '×';
+  requestLiveSolve();
+};
+
+document.getElementById('load-factor').oninput=e=>{loadFactor=+e.target.value; document.getElementById('load-factor-out').textContent=loadFactor.toFixed(2)+'×'; solveAndRender(); };
+
+document.getElementById('btn-export').onclick = () => {
+  const blob = new Blob([JSON.stringify(FEAX_IO.toJSON(), null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'feax.json';
+  a.click();
+};
+
+document.getElementById('file-import').onchange = e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const r = new FileReader();
+  r.onload = () => { FEAX_IO.fromJSON(JSON.parse(r.result)); draw(); };
+  r.readAsText(file);
+};
+
+document.getElementById('btn-solve').onclick=solveAndRender;
+document.getElementById('btn-clear').onclick = () => {
+  M.nodes = [];
+  M.bars = [];
+  M.nextNodeId = 1;
+  M.nextBarId = 1;
+  last = null;
+  draw();
+  updateSelectedInfo();
+};
+document.getElementById('btn-preset-crane').onclick=()=>{ presetCrane(); solveAndRender(); };
+document.getElementById('btn-preset-spar').onclick =()=>{ presetSpar(); solveAndRender(); };
+
+/* ---------- Results Panel ---------- */
+function refreshResults(res){
+  const umax=document.getElementById('res-umax');
+  const sigT=document.getElementById('res-sigT');
+  const sigC=document.getElementById('res-sigC');
+  const fos =document.getElementById('res-fos');
+  const mass=document.getElementById('res-mass');
+  const stab=document.getElementById('res-stable');
+
+  if(!res||!res.ok){
+    umax.textContent=sigT.textContent=sigC.textContent=fos.textContent=mass.textContent='–';
+    stab.textContent='–'; stab.className='badge'; return;
+  }
+  umax.textContent=(res.maxU*1000).toFixed(2);
+  sigT.textContent=((res.sigMaxT||0)/1e6).toFixed(2);
+  sigC.textContent=((res.sigMaxC||0)/1e6).toFixed(2);
+  let minfos=Infinity;
+  for(const r of res.elem){
+    const b=M.bars.find(x=>x.id===r.id);
+    const smax=Math.max(Math.abs(r.sigma_top||0),Math.abs(r.sigma_bot||0),Math.abs(r.sigma_ax||0));
+    const f=b.sy/Math.max(1e-9,smax);
+    if(f<minfos) minfos=f;
+  }
+  fos.textContent=isFinite(minfos)?minfos.toFixed(2):'–';
+  mass.textContent=(res.mass).toFixed(2);
+  stab.textContent='OK'; stab.className='badge ok';
+}
+
+/* ---------- Solve & Draw ---------- */
+function solveAndRender(){
+  M.gravityOn = document.getElementById('gravity').value==='on';
+  const res = solveOnce(loadFactor);
+  if(!res.ok){ document.getElementById('res-stable').textContent='UNSTABLE'; document.getElementById('res-stable').className='badge bad'; last=null; refreshResults(null); setStatus('Solve failed: '+res.error); }
+  else { last=res; refreshResults(res); setStatus('Solved'); }
+  draw();
+}
+
+/* ---------- Presets ---------- */
+function presetCrane(){
+  FEAX_IO.fromJSON({nodes:[],bars:[],nextNodeId:1,nextBarId:1,gravityOn:true,cam:M.cam});
+  const steel=MATERIALS.steel, sec={b:0.06,h:0.06};
+  const n0=addNode(0,0); n0.fixedX=true; n0.fixedY=true; n0.fixedR=true;
+  const n1=addNode(2.5,0); n1.fixedY=true;
+  const a=addNode(0.4,1.2), b=addNode(1.4,2.2), c=addNode(2.6,3.0), tip=addNode(3.6,3.15);
+  const mk=(i,j,type='frame')=>addBar(i.id,j.id,steel,sec,type);
+  mk(n0,a); mk(a,b); mk(b,c); mk(c,tip);
+  mk(n0,n1,'truss'); mk(n1,b,'truss'); mk(b,tip,'frame'); mk(n0,b,'truss'); mk(a,n1,'truss'); mk(c,n1,'truss');
+  addNodalLoad(tip.id,0,-5000,0);
+  M.cam.x=1.6; M.cam.y=1.4; M.cam.s=120; draw();
+}
+function presetSpar(){
+  FEAX_IO.fromJSON({nodes:[],bars:[],nextNodeId:1,nextBarId:1,gravityOn:true,cam:M.cam});
+  const al=MATERIALS.al, sec={b:0.04,h:0.06};
+  const n0=addNode(0,0); n0.fixedX=true; n0.fixedY=true; n0.fixedR=true;
+  const n1=addNode(0,0.8); n1.fixedX=true; n1.fixedY=true; n1.fixedR=true;
+  const n2=addNode(0,1.6); n2.fixedX=true; n2.fixedY=true; n2.fixedR=true;
+  const L=4,H=1.6,nx=6,ny=2; const grid=[];
+  for(let i=1;i<=nx;i++) for(let j=0;j<=ny;j++) grid.push(addNode((L/nx)*i,(H/ny)*j));
+  const nodeAt=(ix,jy)=> ix===0? [n0,n1,n2][jy] : grid[(ix-1)*(ny+1)+jy];
+  const mk=(a,b,type='frame')=>addBar(a.id,b.id,al,sec,type);
+  for(let i=0;i<nx;i++){
+    for(let j=0;j<=ny;j++) mk(nodeAt(i,j),nodeAt(i+1,j),'frame');
+    mk(nodeAt(i,0),nodeAt(i+1,1),'truss');
+    mk(nodeAt(i,1),nodeAt(i+1,2),'truss');
+    mk(nodeAt(i,1),nodeAt(i+1,0),'truss');
+    mk(nodeAt(i,2),nodeAt(i+1,1),'truss');
+  }
+  const tip=nodeAt(nx,2); addNodalLoad(tip.id,0,-4000,0);
+  for(let i=0;i<nx;i++){ const top=M.bars.find(b=>b.i===nodeAt(i,2).id && b.j===nodeAt(i+1,2).id); if(top) top.udl=200; }
+  M.cam.x=2.0; M.cam.y=0.8; M.cam.s=130; draw();
+}
+
+/* ---------- Init ---------- */
+resize(); setTool(document.getElementById('t-select'), 'select');
+presetCrane(); solveAndRender();
+
+</script>
+</body>
+</html>
